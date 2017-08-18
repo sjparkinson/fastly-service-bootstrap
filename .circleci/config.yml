@@ -1,0 +1,98 @@
+version: 2
+
+jobs:
+  deploy_staging:
+    docker:
+      - image: hashicorp/terraform
+    steps:
+      - checkout
+      - run:
+          name: Initialize Terraform
+          command: terraform init
+      - run:
+          name: Import State
+          command: terraform import fastly_service_v1.fastly_service_bootstrap $FASTLY_SERVICE_ID
+      - run:
+          name: Deploy Staging
+          command: terraform apply
+
+  test_staging:
+    docker:
+      - image: circleci/node:8
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "package-lock.json" }}
+      - run:
+          name: Install Dependencies
+          command: npm install
+      - save_cache:
+          key: dependency-cache-{{ checksum "package-lock.json" }}
+          paths:
+            - ./node_modules
+      - run:
+          name: Run Tests on Staging
+          command: npm test
+
+  deploy_production:
+    docker:
+      - image: hashicorp/terraform
+    steps:
+      - checkout
+      - run:
+          name: Initialize Terraform
+          command: terraform init
+      - run:
+          name: Import State
+          command: terraform import fastly_service_v1.fastly_service_bootstrap $FASTLY_SERVICE_ID
+      - run:
+          name: Deploy Production
+          command: terraform apply
+
+  test_production:
+    docker:
+      - image: circleci/node:8
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "package-lock.json" }}
+      - run:
+          name: Install Dependencies
+          command: npm install
+      - save_cache:
+          key: dependency-cache-{{ checksum "package-lock.json" }}
+          paths:
+            - ./node_modules
+      - run:
+          name: Run Tests on Production
+          command: npm test
+
+workflows:
+  version: 2
+  deploy_and_test:
+    jobs:
+      - deploy_staging
+
+      - test_staging:
+          requires:
+            - deploy_staging
+
+      - hold:
+          type: approval
+          requires:
+            - deploy_staging
+            - test_staging
+
+      - deploy_production:
+          requires:
+            - hold
+          filters:
+            branches:
+              only: master
+
+      - test_production:
+          requires:
+            - deploy_production
+          filters:
+            branches:
+              only: master
