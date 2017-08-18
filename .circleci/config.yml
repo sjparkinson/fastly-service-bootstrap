@@ -69,7 +69,7 @@ jobs:
 
 workflows:
   version: 2
-  deploy_and_test:
+  deploy:
     jobs:
       - deploy_staging
 

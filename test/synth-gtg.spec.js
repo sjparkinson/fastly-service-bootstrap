@@ -12,7 +12,7 @@ describe("/__gtg", () => {
       .then(res => {
         expect(res).to.have.status(200);
         expect(res).to.be.text;
-        expect(res.text).to.equal("OK");
+        expect(res.text).to.equal("I am OK.");
       })
       .catch(err => {
         throw err;

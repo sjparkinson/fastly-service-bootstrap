@@ -11,7 +11,7 @@ sub vcl_error {
         set obj.response = "OK";
         set obj.http.Content-Type = "text/plain";   
 
-        synthetic {"OK"};
+        synthetic {"I am OK."};
 
         return(deliver);
     }
