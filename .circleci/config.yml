@@ -1,98 +1,125 @@
 version: 2
 
 jobs:
-  deploy_staging:
+  validate_terraform:
     docker:
       - image: hashicorp/terraform
     steps:
       - checkout
       - run:
-          name: Initialize Terraform
-          command: terraform init
-      - run:
-          name: Import State
-          command: terraform import fastly_service_v1.fastly_service_bootstrap $FASTLY_SERVICE_ID
-      - run:
-          name: Deploy Staging
-          command: terraform apply
-
-  test_staging:
+          name: Validate Terraform Formatting
+          command: "[[ $(terraform fmt -write=false terraform/) != *[^[:space:]]* ]] || terraform fmt -write=false -diff terraform/"
+  
+  validate_node:
     docker:
       - image: circleci/node:8
     steps:
       - checkout
       - restore_cache:
-          key: dependency-cache-{{ checksum "package-lock.json" }}
+          key: npm-dependency-cache-{{ checksum "package-lock.json" }}
       - run:
           name: Install Dependencies
           command: npm install
       - save_cache:
-          key: dependency-cache-{{ checksum "package-lock.json" }}
+          key: npm-dependency-cache-{{ checksum "package-lock.json" }}
+          paths:
+            - ./node_modules
+      - run:
+          name: Validate Node.js Formatting
+          command: "[[ $(prettier --list-different 'test/**/*.js') != *[^[:space:]]* ]] || prettier --list-different 'test/**/*.js'"
+
+  plan:
+    docker:
+      - image: hashicorp/terraform
+    steps:
+      - checkout
+      - run:
+          name: Install jq
+          command: apk add jq
+      - run:
+          name: Wait for Builds
+          command: .circleci/do-exclusively.sh echo "Running as exclusive build."
+      - restore_cache:
+          key: terraform-dependency-cache
+      - run:
+          name: Initialize Terraform
+          command: terraform init -upgrade
+      - save_cache:
+          key: terraform-dependency-cache
+          paths:
+            - ./.terraform
+      - run:
+          name: Import State
+          command: terraform import -config=terraform/ fastly_service_v1.fastly_service_bootstrap $FASTLY_SERVICE_ID
+      - run:
+          name: Plan the Deploy
+          command: terraform plan -out terraform.tfplan terraform/
+      - persist_to_workspace:
+          root: /tmp/terraform
+          paths:
+            - .terraform/
+            - deploy.tfplan
+
+  deploy:
+    docker:
+      - image: hashicorp/terraform
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp/terraform
+      - run:
+          name: Install jq
+          command: apk add jq
+      - run:
+          name: Copy Terraform Setup
+          command: cp /tmp/terraform/.terraform .terraform/
+      - run:
+          name: Deploy using the Terraform Plan
+          command: .circleci/do-exclusively.sh --branch master terraform apply /tmp/terraform/terraform.tfplan
+
+  test:
+    docker:
+      - image: circleci/node:8
+    steps:
+      - checkout
+      - restore_cache:
+          key: npm-dependency-cache-{{ checksum "package-lock.json" }}
+      - run:
+          name: Install Dependencies
+          command: npm install
+      - save_cache:
+          key: npm-dependency-cache-{{ checksum "package-lock.json" }}
           paths:
             - ./node_modules
       - run:
           name: Run Tests on Staging
           command: npm test
 
-  deploy_production:
-    docker:
-      - image: hashicorp/terraform
-    steps:
-      - checkout
-      - run:
-          name: Initialize Terraform
-          command: terraform init
-      - run:
-          name: Import State
-          command: terraform import fastly_service_v1.fastly_service_bootstrap $FASTLY_SERVICE_ID
-      - run:
-          name: Deploy Production
-          command: terraform apply
-
-  test_production:
-    docker:
-      - image: circleci/node:8
-    steps:
-      - checkout
-      - restore_cache:
-          key: dependency-cache-{{ checksum "package-lock.json" }}
-      - run:
-          name: Install Dependencies
-          command: npm install
-      - save_cache:
-          key: dependency-cache-{{ checksum "package-lock.json" }}
-          paths:
-            - ./node_modules
-      - run:
-          name: Run Tests on Production
-          command: npm test
-
 workflows:
   version: 2
   deploy:
     jobs:
-      - deploy_staging
+      - validate_terraform
+      - validate_node
 
-      - test_staging:
+      - plan:
           requires:
-            - deploy_staging
+            - validate_terraform
+            - validate_node
 
       - hold:
           type: approval
-          requires:
-            - deploy_staging
-            - test_staging
+          requires: ["plan"]
 
-      - deploy_production:
-          requires:
-            - hold
+      - deploy:
+          requires: ["hold"]
           filters:
             branches:
               only: master
 
-      - test_production:
+      - test:
           requires:
-            - deploy_production
+            - deploy
           filters:
             branches:
               only: master

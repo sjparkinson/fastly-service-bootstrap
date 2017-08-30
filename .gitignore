@@ -1,6 +1,8 @@
 # Compiled files
+terraform.tfplan
 *.tfstate
 *.tfstate.backup
+*_vcl_override.tf
 
 # Module directory
 .terraform/

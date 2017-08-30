@@ -5,7 +5,6 @@
   "author": "Samuel Parkinson <samuel.parkinson@ft.com>",
   "private": true,
   "scripts": {
-    "fmt": "terraform fmt && prettier --write 'test/**/*.js'",
     "test": "mocha --timeout 60000"
   },
   "license": "MIT",
