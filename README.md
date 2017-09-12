@@ -12,7 +12,7 @@ export FASTLY_API_KEY=
 
 How to limit to one master deploy at a time in CircleCI, https://discuss.circleci.com/t/serializing-deployments/153.
 
-Caching the Terraform state file between deploys, https://circleci.com/docs/2.0/caching/.
+~Caching the Terraform state file between deploys, https://circleci.com/docs/2.0/caching/.~, no need for a Fastly only configuration we can just import the state on every build and keep it simple.
 
 Passing the plan between CircleCI jobs in the workflow, https://circleci.com/docs/2.0/workflows/#using-workspaces-to-share-data-among-jobs.
 
